@@ -2,7 +2,7 @@ import logging
 from typing import Optional, Union, List, Dict
 import os
 import fredapi as fred
-import pandas as pd
+import polars as pl
 from datetime import datetime
 import yfinance as yf
 
@@ -32,7 +32,7 @@ class DataLoader:
                    start_date: str = "2000-04-01",
                    end_date: str = None,
                    interval: str = "1d",
-                   save: bool = True) -> Dict[str, pd.DataFrame]:
+                   save: bool = True) -> Dict[str, pl.DataFrame]:
         
         if end_date == None:
             end_date = datetime.now().strftime("%Y-%m-%d")
@@ -56,18 +56,18 @@ class DataLoader:
                                          auto_adjust=True,
                                          progress=False)
                 
-                # sort newest first
-                stock_data = stock_data.sort_index(ascending=False)
-                
+                stock_df = pl.DataFrame(stock_data.reset_index())
+                stock_df = stock_df.rename({"('Date', '')": "Date"}).sort(by="Date", descending=True)
+
                 # save data if specified
                 if save:
                     file_name = f"{ticker}_{start_date}_{end_date}.csv"
                     file_path = os.path.join(self.raw_dir, file_name)
-                    stock_data.to_csv(file_path)
+                    stock_df.write_csv(file_path)
                     logger.info(f"Saved {ticker} data to {file_path}")
                 
                 # add stock data to dictionary
-                results[ticker] = stock_data
+                results[ticker] = stock_df
 
             except Exception as e:
                 logger.error(f"Error fetching data for {ticker}: {e}")
@@ -78,7 +78,7 @@ class DataLoader:
                                   indicators: Union[str, List[str]] = ["GDP", "CP", "CIVPART"],
                                   start_date: str = "2000-04-01",
                                   end_date: Optional[str] = None,
-                                  save: bool = True) -> Dict[str, pd.DataFrame]:
+                                  save: bool = True) -> Dict[str, pl.DataFrame]:
         if self.fred_client == None:
             logger.error(f"FRED client API not initialized. Please provide a valid API key.")
             return {}
@@ -103,19 +103,13 @@ class DataLoader:
                                                      observation_end=end_date)
                 
                 # convert series to dataframe
-                df = pd.DataFrame(series)
-
-                # sort newest first
-                df = df.sort_index(ascending=False)
-
-                # label data
-                df.columns = [indicator]
-                df.index.name = "Date"
+                raw_data = {"Date": series.index.tolist(), f"{indicator}": series.values.tolist()}
+                df = pl.DataFrame(raw_data).sort(by="Date", descending=True)
 
                 if save:
                     file_name = f"{indicator}_{start_date}_{end_date}.csv"
                     file_path = os.path.join(self.raw_dir, file_name)
-                    df.to_csv(file_path)
+                    df.write_csv(file_path)
                     logger.info(f"Saved {indicator} data to {file_path}")
 
                 # add economic indicator to dictionary
@@ -125,3 +119,7 @@ class DataLoader:
                 logger.error(f"Error fetching {indicator}: {e}")
         
         return results
+    
+loader = DataLoader()
+print(loader.fetch_stock_data()["^IXIC"])
+# print(loader.fetch_economic_indicators()["GDP"])
