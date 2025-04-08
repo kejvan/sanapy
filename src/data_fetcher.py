@@ -120,6 +120,39 @@ class DataLoader:
         
         return results
     
-loader = DataLoader()
-print(loader.fetch_stock_data()["^IXIC"])
-# print(loader.fetch_economic_indicators()["GDP"])
+    def load_from_file(self, file_path: str) -> pl.DataFrame:
+        try:
+            logger.info(f"Loading data from {file_path}")
+            
+            # check if the input is path to the file or just the file
+            if not os.path.exists(file_path):
+                full_path = os.path.join(self.raw_dir, file_path)
+
+                if not os.path.exists(full_path):
+                    logger.error(f"File not found: {file_path} or {full_path}")
+                    return pl.DataFrame()
+
+                file_path = full_path
+            
+            # read data
+            df = pl.read_csv(file_path)
+            return df
+        
+        except Exception as e:
+            logger.error(f"Error loading data from {file_path}: {e}")
+            return pl.DataFrame
+
+    def list_available_files(self) -> List[str]:
+        try:
+            # show files except the hidden system files
+            return [file for file in os.listdir(self.raw_dir) if not file.startswith('.')]
+        except Exception as e:
+            logger.error(f"Error listing files: {e}")
+            return []
+
+
+# example usage
+if __name__ == "__main__":
+    loader = DataLoader()
+    nasdaq_data = loader.fetch_stock_data()["^IXIC"]
+    print(nasdaq_data.head(3))
